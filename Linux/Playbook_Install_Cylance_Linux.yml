@@ -1,0 +1,105 @@
+---
+- hosts: all
+  vars_files:
+    - ./group_vars/Linux
+  become: true
+  gather_facts: yes
+  tasks:
+  - name: Apagar dados antigos e gerar pasta de instalação
+    shell: ( rm -rf {{ local }}/*.txt ./{{ ansible_hostname }}*.zip ; mkdir -p {{ local }} )
+    ignore_errors: true
+
+  - name: Gerar pré relatório dos servidores CentOS
+    shell: ( file='{{ local }}{{ ansible_hostname }}_before_'$(date +%d-%m-%Y)'.txt' ; echo $(uname -a) > $file ; systemctl list-units --type=service >> $file ; yum list installed >> $file ; )
+    ignore_errors: true
+    when: (ansible_facts['distribution'] == "CentOS")
+  
+  - name: Gerar pré relatório dos servidores Ubuntu
+    shell: ( file='{{ local }}{{ ansible_hostname }}_before_'$(date +%d-%m-%Y)'.txt' ; echo $(uname -a) > $file ; systemctl list-units --type=service >> $file ; dpkg-query -l >> $file; apt list --upgradeable >> $file ; )
+    ignore_errors: true
+    when: (ansible_facts['distribution'] == "Ubuntu")
+
+  - name: Criar o arquivo de configuração do Cylance
+    shell: ( mkdir /opt/cylance/ ; echo {{ server_configs }} > /opt/cylance/config_defaults.txt )
+
+  - name: Enviar instaladores Cylance RPM
+    copy:
+      src: /home/{{ ansible_user }}/cylance/Cylance-centos/centos{{ hostvars[inventory_hostname].ansible_distribution_major_version }}
+      dest: "{{ local }}"
+      directory_mode: yes
+      mode: 0777
+    when: (ansible_facts['distribution'] == "CentOS")
+
+  - name: Enviar instalador Cylance Optics RPM
+    copy:
+      src: "{{ item }}"
+      dest: "{{ local }}centos{{ hostvars[inventory_hostname].ansible_distribution_major_version }}"
+      mode: 0777
+    when: (ansible_facts['distribution'] == "CentOS")
+    with_fileglob: 
+      - "/home/{{ ansible_user }}/cylance/Cylance-centos/CylanceOPTICS*.rpm"
+
+  - name: Enviar instaladores Cylance DEB
+    copy:
+      src: /home/{{ ansible_user }}/cylance/Cylance-ubuntu/{{ hostvars[inventory_hostname].ansible_distribution_version }}
+      dest: "{{ local }}"
+      directory_mode: yes
+      mode: 0777
+    when: (ansible_facts['distribution'] == "Ubuntu")
+
+  - name: Enviar instalador Cylance Optics DEB
+    copy:
+      src: "{{ item }}"
+      dest: "{{ local }}{{ hostvars[inventory_hostname].ansible_distribution_version }}"
+      mode: 0777
+    when: (ansible_facts['distribution'] == "Ubuntu")
+    with_fileglob: 
+      - "/home/{{ ansible_user }}/cylance/Cylance-ubuntu/cylance-optics*.deb"
+    
+  - name: Update apt-get repo and cache
+    apt: update_cache=yes force_apt_get=yes cache_valid_time=3600
+    when: (ansible_facts['distribution'] == "Ubuntu")
+
+#  - name: Install Cylance OpenDriver
+#    shell:
+#      yum -y localinstall "{{ local }}"CylancePROTECTOpenDriver-*.rpm 
+#    when: (ansible_facts['distribution'] == "CentOS")
+
+#  - name: Install Cylance Driver
+#    shell:
+#      yum -y localinstall "{{ local }}"CylancePROTECTDriver-*.rpm
+#   when: (ansible_facts['distribution'] == "CentOS")
+
+  - name: Instalar Cylance Ubuntu
+    shell: ( cd {{ local }}{{ hostvars[inventory_hostname].ansible_distribution_version }} ; var01=$(ls cylance-protect-open-driver_*.deb cylance-protect-driver_*.deb cylance-protect.*.deb cylance-optics*.deb) ; dpkg -i $var01 ; )
+    when: (ansible_facts['distribution'] == "Ubuntu")
+
+  - name: Gerar pós relatório dos servidores CentOS
+    shell: ( file='{{ local }}{{ ansible_hostname }}_after_'$(date +%d-%m-%Y)'.txt' ; echo $(uname -a) > $file ; systemctl list-units --type=service >> $file ; yum list installed >> $file ; chmod 777 {{ local }}*.txt )
+    ignore_errors: true
+    when: (ansible_facts['distribution'] == "CentOS")
+
+  - name: Gerar pós relatório dos servidores Ubuntu
+    shell: ( file='{{ local }}{{ ansible_hostname }}_after_'$(date +%d-%m-%Y)'.txt' ; echo $(uname -a) > $file ; systemctl list-units --type=service >> $file ; dpkg-query -l >> $file ; chmod 777 {{ local }}*.txt )
+    ignore_errors: true
+    when: (ansible_facts['distribution'] == "Ubuntu")
+
+  - name: Comprimir relatório de output
+    community.general.archive:
+      path: "{{ local }}*.txt"
+      dest: "Cylance_Install_Report_{{ ansible_hostname }}.zip"
+      format: zip
+      mode: 0777
+
+  - name: Coletar relatório de output do host
+    fetch:
+      src: "Cylance_Install_Report_{{ ansible_hostname }}.zip"
+      dest: /home/{{ ansible_user }}/cylance/report_hosts/
+      mode: 0777
+      fail_on_missing: yes
+
+#  - name: Listar diretorios
+#    shell: ( ls -lha {{ local }}* {{ local }}*/* )
+#    register: var01
+#  - debug:
+#     msg: "{{ var01.stdout_lines }}"
