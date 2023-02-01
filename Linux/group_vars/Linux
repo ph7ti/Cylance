@@ -1,0 +1,12 @@
+#ansible_port: 22
+ansible_become: yes
+ansible_become_method: sudo
+ansible_user: myUser
+ansible_password: 'myPasswd'
+#ansible_become_user: myUser
+ansible_become_user: root
+ansible_become_password: 'myPasswd'
+ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+ansible_remote_user: myUser
+local: '/home/myUser/cylance_install/'
+server_configs: '"InstallToken=myToken \nSelfProtectionLevel=2 \nLogLevel=2 \nVenueZone=myZone"'
