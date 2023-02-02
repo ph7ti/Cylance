@@ -20,11 +20,12 @@
     when: (ansible_facts['distribution'] == "Ubuntu")
 
   - name: Criar o arquivo de configuração do Cylance
-    shell: ( mkdir /opt/cylance/ ; echo {{ server_configs }} > /opt/cylance/config_defaults.txt )
+    shell: ( mkdir -p /opt/cylance/ ; echo {{ server_configs }} > /opt/cylance/config_defaults.txt )
+    ignore_errors: false
 
   - name: Enviar instaladores Cylance RPM
     copy:
-      src: /home/{{ ansible_user }}/cylance/Cylance-centos/centos{{ hostvars[inventory_hostname].ansible_distribution_major_version }}
+      src: ~/Install_Cylance/Cylance-centos/centos{{ hostvars[inventory_hostname].ansible_distribution_major_version }}
       dest: "{{ local }}"
       directory_mode: yes
       mode: 0777
@@ -41,7 +42,7 @@
 
   - name: Enviar instaladores Cylance DEB
     copy:
-      src: /home/{{ ansible_user }}/cylance/Cylance-ubuntu/{{ hostvars[inventory_hostname].ansible_distribution_version }}
+      src: ~/Install_Cylance/Cylance-ubuntu/{{ hostvars[inventory_hostname].ansible_distribution_version }}
       dest: "{{ local }}"
       directory_mode: yes
       mode: 0777
@@ -54,7 +55,10 @@
       mode: 0777
     when: (ansible_facts['distribution'] == "Ubuntu")
     with_fileglob: 
-      - "/home/{{ ansible_user }}/cylance/Cylance-ubuntu/cylance-optics*.deb"
+      - "~/Install_Cylance/Cylance-ubuntu/cylance-optics*.deb"
+
+  - name: Atribuir leitura arquivos enviados
+    shell: ( chmod -R 777 /home/{{ ansible_user }}/cylance_install ; chown user:user -R /home/{{ ansible_user }}/cylance_install )
     
   - name: Update apt-get repo and cache
     apt: update_cache=yes force_apt_get=yes cache_valid_time=3600
@@ -71,7 +75,7 @@
 #   when: (ansible_facts['distribution'] == "CentOS")
 
   - name: Instalar Cylance Ubuntu
-    shell: ( cd {{ local }}{{ hostvars[inventory_hostname].ansible_distribution_version }} ; var01=$(ls cylance-protect-open-driver_*.deb cylance-protect-driver_*.deb cylance-protect.*.deb cylance-optics*.deb) ; dpkg -i $var01 ; )
+    shell: ( sudo apt install libxml2-utils make gcc bzip2 -y ; cd {{ local }}{{ hostvars[inventory_hostname].ansible_distribution_version }} ; var01=$(ls cylance-protect-open-driver_*.deb cylance-protect-driver_*.deb cylance-protect.*.deb cylance-optics*.deb) ; dpkg -i $var01 ; apt install -f -y ; )
     when: (ansible_facts['distribution'] == "Ubuntu")
 
   - name: Gerar pós relatório dos servidores CentOS
@@ -94,12 +98,9 @@
   - name: Coletar relatório de output do host
     fetch:
       src: "Cylance_Install_Report_{{ ansible_hostname }}.zip"
-      dest: /home/{{ ansible_user }}/cylance/report_hosts/
+      dest: ~/Install_Cylance/report_hosts/
       mode: 0777
       fail_on_missing: yes
 
-#  - name: Listar diretorios
-#    shell: ( ls -lha {{ local }}* {{ local }}*/* )
-#    register: var01
-#  - debug:
-#     msg: "{{ var01.stdout_lines }}"
+  - name: Checar status da instalação
+    shell: ( cat /opt/cylance/config_defaults.txt ; lsmod | grep CyProtectDrv ;)
